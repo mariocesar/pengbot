@@ -1,2 +1,4 @@
 # pengbot
-A Robot that wants to be human
+
+A Robot with human manners
+
