@@ -4,7 +4,6 @@ Example robot
     Hello this robot
 
 """
-from datetime import datetime
 from pengbot.api import command, env
 # from pengbot.api import listen
 
@@ -22,8 +21,20 @@ def bye():
 @command(alias=['now', 'what time is it?'])
 def say_time():
     """Return the current time"""
+    from datetime import datetime
+
     return 'The current date and time is {}'.format(datetime.now())
 
+@command
+def uptime():
+    """Uptime of a Linux machine"""
+    from datetime import timedelta
+
+    with open('/proc/uptime', 'r') as f:
+        uptime_seconds = float(f.readline().split()[0])
+        uptime_string = str(timedelta(seconds = uptime_seconds))
+
+    return uptime_string
 
 @command
 def dance():
