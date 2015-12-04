@@ -3,12 +3,18 @@ import sys
 import json
 import importlib
 import logging
-
+from datetime import datetime
+from datetime import timedelta, tzinfo
 from contextlib import contextmanager
 from types import ModuleType
 
+try:
+    import pytz
+except ImportError:
+    pytz = None
 
-__all__ = ('AttributeDict', 'abort', 'imported')
+
+__all__ = ('AttributeDict', 'abort', 'imported', 'utc', 'now')
 
 
 class ObjectEncoder(json.JSONEncoder):
@@ -65,7 +71,7 @@ def imported(path):
 
     directory, filename = os.path.split(path)
     logger.debug('importing: %s', path)
-    
+
     if directory not in sys.path:
         sys.path.insert(0, directory)
         _added = True
@@ -91,6 +97,7 @@ codeCodes = {
     'normal':    '0'
 }
 
+
 @contextmanager
 def colorizer(color, out=None):
     """Colorize stdout"""
@@ -105,3 +112,31 @@ def colorizer(color, out=None):
     yield
 
     stdout.write("\033[0m")
+
+
+ZERO = timedelta(0)
+
+
+class UTC(tzinfo):
+    """
+    UTC implementation taken from Python's docs.
+    Used only when pytz isn't available.
+    """
+
+    def __repr__(self):
+        return "<UTC>"
+
+    def utcoffset(self, dt):
+        return ZERO
+
+    def tzname(self, dt):
+        return "UTC"
+
+    def dst(self, dt):
+        return ZERO
+
+utc = UTC()
+
+
+def now():
+    return datetime.utcnow().replace(tzinfo=utc)

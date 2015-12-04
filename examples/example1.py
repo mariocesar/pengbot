@@ -13,7 +13,7 @@ def hello():
     return 'Hello'
 
 
-@command
+@command(alias=['good bye'])
 def bye():
     return 'Good bye'
 
@@ -27,7 +27,7 @@ def say_time():
 
 @command
 def uptime():
-    """Uptime of a Linux machine"""
+    """Uptime of the host machine"""
     from datetime import timedelta
 
     with open('/proc/uptime', 'r') as f:
@@ -35,11 +35,6 @@ def uptime():
         uptime_string = str(timedelta(seconds = uptime_seconds))
 
     return uptime_string
-
-@command
-def dance():
-    """Dancing music!"""
-    return 'Dancing!'
 
 
 # @listen

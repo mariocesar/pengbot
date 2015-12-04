@@ -1,12 +1,12 @@
-
 __all__ = ('command',)
+
 
 class Command:
     name = None
     aliases = None
 
     def __init__(self, callable, alias=None):
-        
+
         if alias:
             assert isinstance(alias, (list, tuple, str)), 'Alias must be string or list'
 
@@ -24,8 +24,8 @@ class Command:
     def __call__(self, *args, **kwargs):
         return self.run(*args, **kwargs)
 
-    def run(self, *args, **kwargs):
-        return self.wrapped(*args, **kwargs)
+    def run(self, *args):
+        return self.wrapped(*args)
 
 
 def command(*args, **kwargs):

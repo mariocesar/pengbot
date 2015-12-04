@@ -2,9 +2,9 @@ import sys
 import os
 import logging
 import logging.config
-
+from collections import OrderedDict
 from optparse import OptionParser
-from .utils import abort, imported
+from .utils import abort, imported, now
 
 __all__ = ('main',)
 
@@ -20,17 +20,17 @@ LOGGING = {
         },
     },
     'handlers': {
-        'console':{
-            'level':'DEBUG',
-            'class':'logging.StreamHandler',
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
             'formatter': 'simple'
         }
     },
     'loggers': {
         'pengbot': {
-            'handlers':['console'],
+            'handlers': ['console'],
             'propagate': True,
-            'level':'INFO',
+            'level': 'INFO',
         }
     }
 }
@@ -47,13 +47,16 @@ def find_botfile(names):
     return os.path.abspath(botfile_path)
 
 
-def load_directives(path):
+def load_features(path):
     from .command import Command
+    from .listener import Listener
 
     with imported(path) as module:
         module_vars = vars(module)
 
-        directives = dict()
+        directives = OrderedDict()
+        listeners = OrderedDict()
+
         docstring = module.__doc__
 
         for tup in module_vars.items():
@@ -66,7 +69,10 @@ def load_directives(path):
                     for alias in obj.aliases:
                         directives[alias] = directives[name]
 
-    return docstring, directives, module
+            if isinstance(obj, Listener):
+                listeners[name] = obj
+
+    return docstring, directives, listeners, module
 
 
 def main():
@@ -76,19 +82,22 @@ def main():
 
     parser = OptionParser(usage=("%prog [options] path/to/botfile.py"), version="%prog 1.0")
 
-    parser.add_option('--loglevel', '-L',
+    parser.add_option(
+        '--loglevel', '-L',
         choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'],
         dest='loglevel',
         default='INFO'
     )
 
-    parser.add_option('-n', '--name',
+    parser.add_option(
+        '-n', '--name',
         dest='name',
         default='bot',
         help='name of the Bot'
     )
 
-    parser.add_option('--adapter',
+    parser.add_option(
+        '--adapter',
         dest='adapter',
         default='shell',
         help='Bot adapter where to listen for commands, by default a interactive "shell" session'
@@ -109,7 +118,7 @@ def main():
     logger.debug('remainder_arguments: {}'.format(remainder_arguments))
 
     botfile = find_botfile(arguments)
-    docstring, directives, module = load_directives(botfile)
+    docstring, directives, listeners, module = load_features(botfile)
 
     env.module = module
     env.docstring = docstring
@@ -119,6 +128,7 @@ def main():
     logger.debug('env: {}'.format(env))
     logger.debug('botfile module: {}'.format(module))
     logger.debug('directives found: {}'.format(', '.join(directives.keys())))
+    logger.debug('listeners found: {}'.format(', '.join(listeners.keys())))
 
     adapters_path = os.path.dirname(os.path.abspath(__file__))
     adapters_path = os.path.join(adapters_path, 'adapters', '{}.py'.format(options.adapter))
@@ -126,19 +136,20 @@ def main():
     assert os.path.exists(adapters_path), 'Unknown adapter %s' % options.adapter
 
     with imported(adapters_path) as adapter_module:
-        adapter = adapter_module.Adapter(env=env, directives=directives)
+        adapter = adapter_module.Adapter(env=env, directives=directives, listeners=listeners)
 
-        try:
-            adapter.run()
-        except SystemExit:
-            raise
-        except KeyboardInterrupt:
-            sys.stderr.write("\nStopped.\n")
-        except:
-            sys.excepthook(*sys.exc_info())
-            # we might leave stale threads if we don't explicitly exit()
-            sys.exit(1)
-        finally:
-            adapter.close()
+    try:
+        env.bot_start_date = now()
+        adapter.run()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        sys.stderr.write("\nStopped.\n")
+    except:
+        sys.excepthook(*sys.exc_info())
+        # we might leave stale threads if we don't explicitly exit()
+        sys.exit(1)
+    finally:
+        adapter.close()
 
-        sys.exit(0)
+    sys.exit(0)

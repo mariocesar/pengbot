@@ -57,10 +57,10 @@ class Shell(cmd.Cmd):
 
 
 class Adapter(BaseAdapter):
-    def __init__(self, env, directives):
-        super().__init__(env, directives)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.shell = Shell(self)
-        self.shell.prompt = "{env.host_user}> ".format(env=env)
+        self.shell.prompt = "{env.host_user}> ".format(env=self.env)
 
     def run(self):
         with colorizer('green'):

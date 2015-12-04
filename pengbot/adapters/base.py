@@ -8,9 +8,10 @@ class UnknownCommand(Exception):
 
 
 class BaseAdapter:
-    def __init__(self, env, directives):
-        self.env = env
-        self.directives = directives
+    def __init__(self, *args, **kwargs):
+        self.env = kwargs['env']
+        self.directives = kwargs['directives']
+        self.listeners = kwargs['listeners']
 
     def send(self, data):
         raise NotImplementedError()
@@ -28,13 +29,15 @@ class BaseAdapter:
             return
 
         _message = message.split()
-        command = _message.pop()
-        args = ' '.join(_message)
+        command = _message.pop(0)
+        command_args = _message
 
-        logger.debug('command=%s, args=%s', command, args)
+        logger.debug('command=%s, args=%s', command, command_args)
 
         if command in self.directives:
-            cmd = self.directives[command]
-            return cmd.run()
+            func = self.directives[command]
+            return func.run(*command_args)
         else:
-            raise UnknownCommand('Unknown command "%s"' % command)
+            for listener in self.listeners:
+                func = self.listeners[listener]
+                return func.run(message)
