@@ -12,12 +12,12 @@ A Robot with human manners
     - Adapters for Slack, XMPP, Twitter.
     - Message stream filters.
     - Message stream middlewares.
-    - Natural Language Processing?.
-    - Stream messages
+    - Stream response messages.
+    - Natural Language Processing?. http://spacy.io
 
 ## Future examples
 
     - Auto linking for Jira Issues.
     - Attach user mentions to issues as comments in Jira.
     - Bots talking to bots.
-    - Voting and Polls
+    - Voting and Polls.
