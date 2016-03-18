@@ -14,7 +14,7 @@ Pengbot: For building robots with human manners
             api_token=os.environ.get('SLACK_API_TOKEN', None)
         )
 
-    @vvbot.hears(Mention)
+    @mybot.hears(Mention)
     def talking_parrot(bot, message):
         yield from bot.says(':bird: %s' % message['text'] , channel=message['channel'])
 
