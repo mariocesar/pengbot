@@ -7,8 +7,9 @@ from pip.utils import cached_property
 from slacker import Slacker
 
 from pengbot.adapters.base import BaseAdapter
+from pengbot.matchers import PatternMatch as BasePatternMatch
 
-events = {
+EVENTS = {
     "hello": "The client has successfully connected to the server",
     "message": "A message was sent to a channel",
     "user_typing": "A channel member is typing a message",
@@ -80,39 +81,42 @@ events = {
 }
 
 
-class Everything:
-    def __call__(self, context, data):
-        return True
+class Event:
+    def __init__(self, code):
+        assert code in EVENTS, '%s is an unknown event' % code
+        self.code = code
+
+    def __call__(self, context, message):
+        if 'type' in message:
+            return message[self.code] == self.code
 
 
 class Message:
-    def __call__(self, context, data):
-        if data.get('type', None) == 'message':
-            if 'reply_to' not in data:
-                # Dimiss messages from lost connections
-                return True
+    def __call__(self, context, message):
+        if message.get('type', None) == 'message' and 'reply_to' not in message:
+            # Dimiss messages from lost connections
+            return True
 
 
 class DirectMessage(Message):
-    def __call__(self, context, data):
-        if super().__call__(context, data):
-            return data['channel'] in context['ims']
+    def __call__(self, context, message):
+        if super().__call__(context, message):
+            return message['channel'] in context['ims']
 
 
 class Mention(Message):
-    def __call__(self, context, data):
-        if super().__call__(context, data):
-            if 'text' in data:
-                return '<@%s>' % context['self']['id'] in data['text']
+    def __call__(self, context, message):
+        if super().__call__(context, message):
+            if 'text' in message:
+                return '<@%s>' % context['self']['id'] in message['text']
 
 
-class RegexpMatch(Message):
-    def __init__(self, regexp):
-        self.rule = re.compile(regexp, flags=re.IGNORECASE | re.MULTILINE)
+class PatternMatch(Message, BasePatternMatch):
+    def __init__(self, pattern):
+        self.pattern = re.compile(pattern)
 
-    def __call__(self, context, data):
-        if super().__call__(context, data):
-            return list(self.rule.finditer(data['text']))
+    def __call__(self, context, message):
+        return self.pattern.match(message['text']) is not None
 
 
 class SlackRobot(BaseAdapter):

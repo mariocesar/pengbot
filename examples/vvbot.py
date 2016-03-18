@@ -4,6 +4,7 @@ import re
 
 import pengbot
 from pengbot.adapters import slack
+from pengbot.matchers import Everything
 
 
 @pengbot.slack_robot()
@@ -21,7 +22,7 @@ def vvbot(bot):
     }
 
 
-@vvbot.hears(slack.Everything)
+@vvbot.hears(Everything)
 def hears_everything(bot, message):
     bot.logger.info('Everything callback %s', message)
 
@@ -57,7 +58,7 @@ def talking_parrot(bot, message):
     yield from bot.says(':bird: %s' % message['text'], message['channel'])
 
 
-@vvbot.hears(slack.RegexpMatch(r'(?P<issue>#[1-9][0-9]+)'))
+@vvbot.hears(slack.PatternMatch(r'(?P<issue>#[1-9][0-9]+)'))
 def link_issues(bot, message):
     pass
 
