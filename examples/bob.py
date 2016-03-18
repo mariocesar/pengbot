@@ -19,7 +19,7 @@ def bob(context):
 @bob.discussion()
 def ask_order(discuss):
     with discuss.ask('What flavor do you want?') as reply:
-        discuss.say('%s! great decision!' % reply.message)
+        discuss.says('%s! great decision!' % reply.message)
         discuss.context.flavor = reply.message
 
     return ask_size(discuss)
@@ -28,7 +28,7 @@ def ask_order(discuss):
 @bob.discussion()
 def ask_size(discuss):
     with discuss.ask('What size?') as reply:
-        discuss.say('Great ! %s will be.' % reply.message)
+        discuss.says('Great ! %s will be.' % reply.message)
         discuss.context.size = reply.message
 
     with discuss.askYesNo('Do you want something to drink?') as reply:
@@ -43,7 +43,7 @@ def ask_size(discuss):
 @bob.discussion()
 def ask_beverage(discuss):
     with discuss.askChoice('What soda do you want?', choices=['coke', 'pepsi']) as reply:
-        discuss.say('%s! great decision!' % reply.message)
+        discuss.says('%s! great decision!' % reply.message)
         discuss.context.beverage = reply.message
 
     return discuss
@@ -54,7 +54,7 @@ def ask_deliver(discuss):
     discuss.context.deliver = False
 
     with discuss.askYesNo('Do you want to be deliver?') as reply:
-        discuss.say('Great ! %s will be.' % reply.text)
+        discuss.says('Great ! %s will be.' % reply.text)
         discuss.context.deliver = True
 
 
