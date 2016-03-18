@@ -1,4 +1,12 @@
-from datetime import datetime
+import asyncio
+import json
+import re
+
+import websockets
+from pip.utils import cached_property
+from slacker import Slacker
+
+from pengbot.adapters.base import BaseAdapter
 
 events = {
     "hello": "The client has successfully connected to the server",
@@ -72,54 +80,116 @@ events = {
 }
 
 
-class SlackEvent:
-    _type = None
-
-    def __init__(self, data):
-        self.data = data
-
-    def __hash__(self):
-        return hash(self.data['type'])
-
-
-class User:
-    @classmethod
-    def build(cls, user_id):
-        pass
-
-
-class Channel:
-    @classmethod
-    def build(cls, channel_id):
-        pass
-
-
-class MessageEdit:
-    def __init__(self, data):
-        self.user = User.build(data['user'])
-        self.timestamp = datetime.fromtimestamp(float(data['ts']))
-
-
-class Anything(SlackEvent):
-    def __eq__(self, other):
+class Everything:
+    def __call__(self, context, data):
         return True
 
 
-class Message(SlackEvent):
-    """A message was sent to a channel."""
-    _type = 'message'
+class Message:
+    def __call__(self, context, data):
+        if data.get('type', None) == 'message':
+            if 'reply_to' not in data:
+                # Dimiss messages from lost connections
+                return True
 
-    def __init__(self, data):
-        super(Message, self).__init__(data)
-        self.channel = Channel.build(data['channel'])
-        self.user = User.build(data['user'])
-        self.text = data['text']
-        self.timestamp = datetime.fromtimestamp(float(data['ts']))
-        self.edited = None
 
-        if 'edited' in data:
-            self.edited = MessageEdit(data['edited'])
+class DirectMessage(Message):
+    def __call__(self, context, data):
+        if super().__call__(context, data):
+            return data['channel'] in context['ims']
 
-        self.subtype = None
-        if 'subtype' in data:
-            self.subtype = data['subtype']
+
+class Mention(Message):
+    def __call__(self, context, data):
+        if super().__call__(context, data):
+            if 'text' in data:
+                return '<@%s>' % context['self']['id'] in data['text']
+
+
+class RegexpMatch(Message):
+    def __init__(self, regexp):
+        self.rule = re.compile(regexp, flags=re.IGNORECASE | re.MULTILINE)
+
+    def __call__(self, context, data):
+        if super().__call__(context, data):
+            return list(self.rule.finditer(data['text']))
+
+
+class SlackRobot(BaseAdapter):
+    def __init__(self, name: str, api_token: str):
+        super().__init__(name=name)
+        self.api_token = api_token
+        self.ws = None
+
+    def receive(self):
+        self._message_id = 0
+        resp = self.slacker.rtm.start()
+
+        self.context.update({
+            'self': resp.body['self'],
+            'team': resp.body['team'],
+            'users': {user['id']: user for user in resp.body['users']},
+            'channels': {channel['id']: channel for channel in resp.body['channels']},
+            'groups': {group['id']: group for group in resp.body['groups']},
+            'ims': {i['id']: i for i in resp.body['ims']},
+            'bots': resp.body['bots'],
+        })
+        self.logger.info('Listening to slack')
+        self.logger.debug(json.dumps(self.context, indent=2))
+        return self.websocket_handler(resp.body['url'])
+
+    @cached_property
+    def slacker(self):
+        return Slacker(self.api_token)
+
+    @asyncio.coroutine
+    def websocket_handler(self, url):
+        self.ws = yield from websockets.connect(url)
+        self.running = True
+
+        while True:
+            raw_message = yield from self.ws.recv()
+
+            if not raw_message:
+                break
+
+            message = json.loads(raw_message)
+            self.logger.debug('Received %s', message)
+
+            for handler_match, handler_callbacks in self.handlers.items():
+                if callable(handler_match):
+                    handler_match = handler_match()
+
+                if handler_match(context=self.context, data=message):
+                    for callback in handler_callbacks:
+                        task = asyncio.ensure_future(callback(self, message))
+                        task.add_done_callback(self._done_callback)
+
+    @asyncio.coroutine
+    def send(self, message):
+        content = json.dumps(message)
+
+        yield from self.ws.send(content)
+
+    @asyncio.coroutine
+    def ping(self):
+        if not self.running:
+            return
+
+        self._message_id += 1
+        data = {'tries': self._message_id, 'type': 'ping'}
+        content = json.dumps(data)
+
+        yield from self.ws.send(content)
+
+    @asyncio.coroutine
+    def says(self, text, channel):
+        self._message_id += 1
+        data = {
+            'id': self._message_id,
+            'type': 'message',
+            'channel': channel,
+            'text': text
+        }
+
+        yield from self.send(data)

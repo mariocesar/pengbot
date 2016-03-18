@@ -1,79 +1,83 @@
 import asyncio
+import os
 import re
 
 import pengbot
+from pengbot.adapters import slack
 
 
-class Everything:
-    def __call__(self, context, data):
-        return True
-
-
-class Message:
-    def __call__(self, context, data):
-        if data.get('type', None) == 'message':
-            if 'reply_to' not in data:
-                # Dimiss messages from lost connections
-                return True
-        return False
-
-
-class DirectMessage(Message):
-    def __call__(self, context, data):
-        if super().__call__(context, data):
-            return data['channel'] in context['ims']
-        return False
-
-
-class Mention(Message):
-    def __call__(self, context, data):
-        if super().__call__(context, data):
-            if 'text' in data:
-                return '<@%s>' % context['self']['id'] in data['text']
-        return False
-
-
-@pengbot.robot(name='vvbot', api_token='xoxb-27602091572-A0ZsTeWGR5d0pIYHnV7tpf0B')
+@pengbot.slack_robot()
 def vvbot(bot):
     bot.logger.info('Hi')
+    api_token = os.environ.get('SLACK_API_TOKEN', None)
+
+    if not api_token:
+        print('Missing api token')
+        exit(1)
+
+    return {
+        'name': 'vvbot',
+        'api_token': api_token
+    }
 
 
-@vvbot.hears(Everything)
-@asyncio.coroutine
+@vvbot.hears(slack.Everything)
 def hears_everything(bot, message):
     bot.logger.info('Everything callback %s', message)
 
 
-@vvbot.hears(Mention, DirectMessage)
 @asyncio.coroutine
-def count_to_10(bot, message):
-    bot.logger.info(message)
-    match = re.match(r'.*cuenta hasta (?P<limit>\-?\d+).*', message['text'], re.IGNORECASE)
+def count_to_10(bot, message, limit):
+    bot.logger.info('Contare hasta %s' % limit)
     channel = message['channel']
 
-    if match:
-        limit = int(match.groupdict().get('limit'))
-        bot.logger.info('Contare hasta %s' % limit)
+    if limit > 20:
+        yield from bot.says('... solo se contar hasta 20 :\'(', channel)
+    elif limit <= 0:
+        yield from bot.says('... lo siento, no se contar hasta %s :(' % limit, channel)
+    else:
+        yield from bot.says('Seguro! contare hasta %s!' % limit, channel)
 
-        if limit > 20:
-            yield from bot.says('... solo se contar hasta 20 :\'(', channel)
-        elif limit <= 0:
-            yield from bot.says('... lo siento, no se contar hasta %s :(' % limit, channel)
-        else:
-            yield from bot.says('Seguro! contare hasta %s!' % limit, channel)
+        for n in range(1, limit + 1):
             yield from asyncio.sleep(0.5)
-
-            for n in range(1, limit + 1):
-                yield from bot.says('%s .. ' % n, channel)
-                yield from asyncio.sleep(0.5)
+            yield from bot.says('%s .. ' % n, channel)
 
 
-@vvbot.hears(DirectMessage)
-@asyncio.coroutine
+@vvbot.hears(slack.Mention, slack.DirectMessage)
+def hear_commands(bot, message):
+    count_match = re.match(r'.*cuenta\s+hasta\s+(?P<limit>\-?\d+).*', message['text'], re.IGNORECASE)
+
+    if count_match:
+        limit = int(count_match.groupdict().get('limit'))
+        yield from count_to_10(bot, message, limit)
+
+
+@vvbot.hears(slack.DirectMessage)
 def talking_parrot(bot, message):
-    bot.logger.debug(message)
-
     yield from bot.says(':bird: %s' % message['text'], message['channel'])
+
+
+@vvbot.hears(slack.RegexpMatch(r'(?P<issue>#[1-9][0-9]+)'))
+def link_issues(bot, message):
+    pass
+
+
+@vvbot.respond('uptime')
+def reply_uptime(bot, message):
+    from datetime import timedelta
+
+    with open('/proc/uptime', 'r') as f:
+        uptime_seconds = float(f.readline().split()[0])
+        uptime_string = str(timedelta(seconds=uptime_seconds))
+
+    bot.says(uptime_string)
+
+
+@vvbot.respond('now')
+def reply_now(bot, message):
+    from datetime import datetime
+
+    bot.says('The current date and time is {}'.format(datetime.now()))
 
 
 if __name__ == '__main__':

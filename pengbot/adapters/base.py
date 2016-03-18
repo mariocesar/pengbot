@@ -1,6 +1,10 @@
-import logging
+import asyncio
+from collections import defaultdict
+from functools import wraps
 
-logger = logging.getLogger('pengbot')
+from pengbot import logger
+from pengbot.context import Context
+from pengbot.utils import BotLoggerAdapter
 
 
 class UnknownCommand(Exception):
@@ -8,36 +12,84 @@ class UnknownCommand(Exception):
 
 
 class BaseAdapter:
-    def __init__(self, *args, **kwargs):
-        self.env = kwargs['env']
-        self.directives = kwargs['directives']
-        self.listeners = kwargs['listeners']
+    handlers = []
+    running = False
 
-    def send(self, data):
+    def __init__(self, name: str):
+        self.name = name
+        self.handlers = defaultdict(list)
+        self.context = Context({'name': name})
+        self.logger = logger
+
+        BotLoggerAdapter(logger, {'context': self.context})
+
+    def __call__(self, *args, **kwargs):
+        return self.cli_handler()
+
+    def cli_handler(self):
+        # add cli options
+        try:
+            self.run()
+        except KeyboardInterrupt:
+            exit(0)
+
+    def before_reply(self, message):
+        logger.debug('before_reply: %r', message)
+
+    def after_reply(self, message):
+        logger.debug('after_reply: %r', message)
+
+    def _done_callback(self, future):
+        exc_info = future.exception()
+
+        if exc_info:
+            # handle exception
+            logger.exception('Exception for %r', future, exc_info=exc_info)
+        else:
+            logger.debug('Done callback for %r', future)
+
+    def receive(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    def send(self, message):
+        raise NotImplementedError()
+
+    def says(self, *args, **kwargs):
         raise NotImplementedError()
 
     def run(self):
-        raise NotImplementedError()
+        loop = asyncio.get_event_loop()
+        logger.info('Starting %s', self.name)
+        try:
+            loop.run_until_complete(self.receive())
+        except KeyboardInterrupt:
+            logger.info('Closing')
+            loop.close()
+            raise
+        except Exception as err:
+            logger.exception('Error', exc_info=err)
+            loop.close()
+            raise
 
-    def close(self):
-        raise NotImplementedError()
+    # Directives
 
-    def receive(self, message):
-        logger.debug('Message received: "%s"', message)
+    def hears(self, *matchs):
+        def decorator(func):
+            for match in matchs:
+                self.logger.debug('Registering match %r for %s', match, func)
 
-        if not message:
-            return
+                @wraps(func)
+                def callback(bot, *args, **kwargs):
+                    self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
+                    yield from func(bot, *args, **kwargs)
 
-        _message = message.split()
-        command = _message.pop(0)
-        command_args = _message
+                callback = asyncio.coroutine(callback)
+                self.handlers[match].append(callback)
 
-        logger.debug('command=%s, args=%s', command, command_args)
+        return decorator
 
-        if command in self.directives:
-            func = self.directives[command]
-            return func.run(*command_args)
-        else:
-            for listener in self.listeners:
-                func = self.listeners[listener]
-                return func.run(message)
+    def ask(self, question):
+        pass
+
+    def command(self, name):
+        pass

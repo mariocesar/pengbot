@@ -62,7 +62,7 @@ class Adapter(BaseAdapter):
         self.shell = Shell(self)
         self.shell.prompt = "{env.host_user}> ".format(env=self.env)
 
-    def run(self):
+    def receive(self, *args, **kwargs):
         with colorizer('green'):
             print('\n  Hello {env.host_user}\n'.format(env=self.env))
 

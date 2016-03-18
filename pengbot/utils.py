@@ -1,18 +1,17 @@
+import importlib
+import json
+import logging
 import os
 import sys
-import json
-import importlib
-import logging
+from contextlib import contextmanager
 from datetime import datetime
 from datetime import timedelta, tzinfo
-from contextlib import contextmanager
 from types import ModuleType
 
 try:
     import pytz
 except ImportError:
     pytz = None
-
 
 __all__ = ('AttributeDict', 'abort', 'imported', 'utc', 'now')
 
@@ -54,8 +53,8 @@ class AttributeDict(dict):
 
     def _to_pretty_json(self):
         return json.dumps(self, indent=2,
-            sort_keys=True, separators=(',', ': '),
-            cls=ObjectEncoder)
+                          sort_keys=True, separators=(',', ': '),
+                          cls=ObjectEncoder)
 
 
 def abort(message):
@@ -66,11 +65,12 @@ def abort(message):
 
 @contextmanager
 def imported(path):
-
     logger = logging.getLogger('pengbot')
 
     directory, filename = os.path.split(path)
     logger.debug('importing: %s', path)
+
+    _added = False
 
     if directory not in sys.path:
         sys.path.insert(0, directory)
@@ -86,15 +86,15 @@ def imported(path):
 
 
 codeCodes = {
-    'black':     '0;30', 'bright gray':    '0;37',
-    'blue':      '0;34', 'white':          '1;37',
-    'green':     '0;32', 'bright blue':    '1;34',
-    'cyan':      '0;36', 'bright green':   '1;32',
-    'red':       '0;31', 'bright cyan':    '1;36',
-    'purple':    '0;35', 'bright red':     '1;31',
-    'yellow':    '0;33', 'bright purple':  '1;35',
-    'dark gray': '1;30', 'bright yellow':  '1;33',
-    'normal':    '0'
+    'black': '0;30', 'bright gray': '0;37',
+    'blue': '0;34', 'white': '1;37',
+    'green': '0;32', 'bright blue': '1;34',
+    'cyan': '0;36', 'bright green': '1;32',
+    'red': '0;31', 'bright cyan': '1;36',
+    'purple': '0;35', 'bright red': '1;31',
+    'yellow': '0;33', 'bright purple': '1;35',
+    'dark gray': '1;30', 'bright yellow': '1;33',
+    'normal': '0'
 }
 
 
@@ -135,8 +135,14 @@ class UTC(tzinfo):
     def dst(self, dt):
         return ZERO
 
+
 utc = UTC()
 
 
 def now():
     return datetime.utcnow().replace(tzinfo=utc)
+
+
+class BotLoggerAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        return msg, kwargs
