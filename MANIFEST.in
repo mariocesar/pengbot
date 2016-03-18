@@ -1,1 +1,2 @@
-recursive-exclude __pycache__ *.swp *.pyc *.pyo
+recursive-exclude * __pycache__ *.swp *.pyc *.pyo
+include README.rst LICENSE
