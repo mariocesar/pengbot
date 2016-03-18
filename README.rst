@@ -6,7 +6,8 @@ Pengbot: For building robots with human manners
 .. code-block:: python
 
     import pengbot
-    from pengbot.adapters import SlackRobot, Mention
+    from pengbot.adapters.slack import SlackRobot, Mention
+
 
     @pengbot.make_robot(SlackRobot)
     def mybot(bot):
@@ -14,9 +15,11 @@ Pengbot: For building robots with human manners
             api_token=os.environ.get('SLACK_API_TOKEN', None)
         )
 
+
     @mybot.hears(Mention)
     def talking_parrot(bot, message):
         yield from bot.says(':bird: %s' % message['text'] , channel=message['channel'])
+
 
     if __name__ == '__main__':
         mybot()
