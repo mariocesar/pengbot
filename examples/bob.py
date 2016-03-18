@@ -147,7 +147,4 @@ def log_message(message):
 
 
 if __name__ == '__main__':
-    try:
-        bob.start()
-    except KeyboardInterrupt:
-        bob.shutdown()
+    bob.main_handler()
