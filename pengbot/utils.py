@@ -40,21 +40,59 @@ class AttributeDict(dict):
 
     def __getattr__(self, key):
         try:
-            return self[key]
-        except KeyError:
-            # to conform with __getattr__ spec
-            raise AttributeError(key)
+            # Throws exception if not in prototype chain
+            return object.__getattribute__(self, key)
+        except AttributeError:
+            try:
+                return self[key]
+            except KeyError:
+                raise AttributeError
 
     def __setattr__(self, key, value):
         self[key] = value
+        try:
+            object.__getattribute__(self, key)
+        except AttributeError:
+            try:
+                self[key] = value
+            except:
+                raise AttributeError(key)
+        else:
+            object.__setattr__(self, key, value)
+
+    def __delattr__(self, key):
+        try:
+            object.__getattribute__(self, key)
+        except AttributeError:
+            try:
+                del self[key]
+            except KeyError:
+                raise AttributeError(key)
+        else:
+            object.__delattr__(self, key)
+
+    def __repr__(self):
+        return 'Context(%s)' % self.__json__()
 
     def __str__(self):
-        return self._to_pretty_json()
+        return self.__json__(indent=2)
 
-    def _to_pretty_json(self):
-        return json.dumps(self, indent=2,
+    def __call__(self, **kwargs):
+        print(kwargs)
+        new = self.__class__(self.items())
+        new.update(**kwargs)
+        return new
+
+    def __json__(self, indent=None):
+        return json.dumps(self, indent=indent,
                           sort_keys=True, separators=(',', ': '),
                           cls=ObjectEncoder)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.context.pop()
 
 
 def abort(message):
@@ -85,29 +123,60 @@ def imported(path):
             del sys.path[0]
 
 
-codeCodes = {
-    'black': '0;30', 'bright gray': '0;37',
-    'blue': '0;34', 'white': '1;37',
-    'green': '0;32', 'bright blue': '1;34',
-    'cyan': '0;36', 'bright green': '1;32',
-    'red': '0;31', 'bright cyan': '1;36',
-    'purple': '0;35', 'bright red': '1;31',
-    'yellow': '0;33', 'bright purple': '1;35',
-    'dark gray': '1;30', 'bright yellow': '1;33',
-    'normal': '0'
+color_codes = {
+    'fg': {
+        'black': '30',
+        'red': '31',
+        'green': '32',
+        'yellow': '33',
+        'blue': '34',
+        'purple': '35',
+        'magenta': '36',
+        'bright gray': '37',
+
+        'dark gray': '1;30',
+        'bright red': '1;31',
+        'bright green': '1;32',
+        'bright yellow': '1;33',
+        'bright blue': '1;34',
+        'bright magenta': '1;35',
+        'bright cyan': '1;36',
+        'white': '1;37',
+    },
+    'bg': {
+        'background black': '40',
+        'background red': '41',
+        'background green': '42',
+        'background yellow': '43',
+        'background blue': '44',
+        'background magenta': '45',
+        'background cyan': '46',
+        'background white': '47',
+    },
+    'attr': {
+        'normal': '00',
+        'bold': '01',
+        'underscore': '04',
+        'blink': '05',
+        'reverse': '06',
+        'concealed': '08',
+    }
 }
 
 
 @contextmanager
-def colorizer(color, out=None):
+def colorize(bg=None, fg=None, attr=None, stream=None):
     """Colorize stdout"""
-    stdout = out or sys.stdout
+    stdout = stream or sys.stdout
+    ansi_codes = []
 
-    assert color in codeCodes, 'Unknown color %s' % color
-
-    stdout.write("\033[")
-    stdout.write(codeCodes[color])
-    stdout.write("m")
+    if attr:
+        ansi_codes.append(color_codes['attr'][attr])
+    if fg:
+        ansi_codes.append(color_codes['fg'][fg])
+    if bg:
+        ansi_codes.append(color_codes['bg'][bg])
+    stdout.write("\033[%sm" % ';'.join(ansi_codes))
 
     yield
 
@@ -141,6 +210,12 @@ utc = UTC()
 
 def now():
     return datetime.utcnow().replace(tzinfo=utc)
+
+
+def isbound(obj):
+    if callable(obj):
+        return hasattr(obj.__call__, '__self__')
+    return False
 
 
 class BotLoggerAdapter(logging.LoggerAdapter):

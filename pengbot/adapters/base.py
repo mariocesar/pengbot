@@ -15,16 +15,21 @@ class BaseAdapter:
     handlers = []
     running = False
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self):
         self.handlers = defaultdict(list)
-        self.context = Context({'name': name})
+        self.context = Context()
         self.logger = logger
 
         BotLoggerAdapter(logger, {'context': self.context})
 
     def __call__(self, *args, **kwargs):
         return self.cli_handler()
+
+    @property
+    def name(self):
+        if self.context.get('name', None):
+            return self.context['name']
+        return self.__name__
 
     def cli_handler(self):
         # add cli options
@@ -79,17 +84,24 @@ class BaseAdapter:
                 self.logger.debug('Registering match %r for %s', match, func)
 
                 @wraps(func)
+                @asyncio.coroutine
                 def callback(bot, *args, **kwargs):
                     self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
-                    yield from func(bot, *args, **kwargs)
 
-                callback = asyncio.coroutine(callback)
+                    func(bot, *args, **kwargs)
+
                 self.handlers[match].append(callback)
 
         return decorator
 
     def ask(self, question):
-        pass
+        def decorator(func):
+            return asyncio.coroutine(func)
+
+        return decorator
 
     def command(self, name):
-        pass
+        def decorator(func):
+            return asyncio.coroutine(func)
+
+        return decorator

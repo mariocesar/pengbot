@@ -1,25 +1,21 @@
 import asyncio
+import logging
 import os
 import re
 
 import pengbot
-from pengbot.adapters import slack
+from pengbot.adapters.slack import SlackRobot, Mention, DirectMessage, PatternMatch
 from pengbot.matchers import Everything
 
 
-@pengbot.slack_robot()
+@pengbot.make_robot(SlackRobot)
 def vvbot(bot):
+    bot.logger.setLevel(logging.DEBUG)
     bot.logger.info('Hi')
-    api_token = os.environ.get('SLACK_API_TOKEN', None)
 
-    if not api_token:
-        print('Missing api token')
-        exit(1)
-
-    return {
-        'name': 'vvbot',
-        'api_token': api_token
-    }
+    bot.context = bot.context(
+        api_token=os.environ.get('SLACK_API_TOKEN', None)
+    )
 
 
 @vvbot.hears(Everything)
@@ -44,7 +40,7 @@ def count_to_10(bot, message, limit):
             yield from bot.says('%s .. ' % n, channel)
 
 
-@vvbot.hears(slack.Mention, slack.DirectMessage)
+@vvbot.hears(Mention, DirectMessage)
 def hear_commands(bot, message):
     count_match = re.match(r'.*cuenta\s+hasta\s+(?P<limit>\-?\d+).*', message['text'], re.IGNORECASE)
 
@@ -53,17 +49,17 @@ def hear_commands(bot, message):
         yield from count_to_10(bot, message, limit)
 
 
-@vvbot.hears(slack.DirectMessage)
+@vvbot.hears(DirectMessage)
 def talking_parrot(bot, message):
     yield from bot.says(':bird: %s' % message['text'], message['channel'])
 
 
-@vvbot.hears(slack.PatternMatch(r'(?P<issue>#[1-9][0-9]+)'))
+@vvbot.hears(PatternMatch(r'(?P<issue>#[1-9][0-9]+)'))
 def link_issues(bot, message):
     pass
 
 
-@vvbot.respond('uptime')
+@vvbot.command('uptime')
 def reply_uptime(bot, message):
     from datetime import timedelta
 
@@ -74,7 +70,7 @@ def reply_uptime(bot, message):
     bot.says(uptime_string)
 
 
-@vvbot.respond('now')
+@vvbot.command('now')
 def reply_now(bot, message):
     from datetime import datetime
 

@@ -8,6 +8,7 @@ from slacker import Slacker
 
 from pengbot.adapters.base import BaseAdapter
 from pengbot.matchers import PatternMatch as BasePatternMatch
+from pengbot.utils import isbound
 
 EVENTS = {
     "hello": "The client has successfully connected to the server",
@@ -96,6 +97,7 @@ class Message:
         if message.get('type', None) == 'message' and 'reply_to' not in message:
             # Dimiss messages from lost connections
             return True
+        return False
 
 
 class DirectMessage(Message):
@@ -116,15 +118,11 @@ class PatternMatch(Message, BasePatternMatch):
         self.pattern = re.compile(pattern)
 
     def __call__(self, context, message):
-        return self.pattern.match(message['text']) is not None
+        is_message = super().__call__(context, message)
+        return is_message and self.pattern.match(message['text']) is not None
 
 
 class SlackRobot(BaseAdapter):
-    def __init__(self, name: str, api_token: str):
-        super().__init__(name=name)
-        self.api_token = api_token
-        self.ws = None
-
     def receive(self):
         self._message_id = 0
         resp = self.slacker.rtm.start()
@@ -144,7 +142,7 @@ class SlackRobot(BaseAdapter):
 
     @cached_property
     def slacker(self):
-        return Slacker(self.api_token)
+        return Slacker(self.context.api_token)
 
     @asyncio.coroutine
     def websocket_handler(self, url):
@@ -161,10 +159,13 @@ class SlackRobot(BaseAdapter):
             self.logger.debug('Received %s', message)
 
             for handler_match, handler_callbacks in self.handlers.items():
-                if callable(handler_match):
+                self.logger.debug('Resolving message handler %s %s', handler_match, handler_callbacks)
+                self.logger.debug('Handler match is bound? %s', isbound(handler_match))
+
+                if not isbound(handler_match):
                     handler_match = handler_match()
 
-                if handler_match(context=self.context, data=message):
+                if handler_match(context=self.context, message=message):
                     for callback in handler_callbacks:
                         task = asyncio.ensure_future(callback(self, message))
                         task.add_done_callback(self._done_callback)

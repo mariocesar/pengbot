@@ -5,7 +5,7 @@ __all__ = ('listener',)
 
 
 class Everything:
-    def __call__(self, context, data):
+    def __call__(self, context, message):
         return True
 
 
