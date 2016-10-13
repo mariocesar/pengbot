@@ -122,7 +122,7 @@ class PatternMatch(Message, BasePatternMatch):
         return is_message and self.pattern.match(message['text']) is not None
 
 
-class SlackRobot(BaseAdapter):
+class MainAdapter(BaseAdapter):
     def receive(self):
         self._message_id = 0
         resp = self.slacker.rtm.start()

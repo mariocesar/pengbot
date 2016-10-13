@@ -16,14 +16,15 @@ __copyright__ = 'Copyright 2016 Mario César Señoranis Ayala'
 import logging
 from functools import wraps
 
-logger = logging.getLogger(__name__).addHandler(logging.NullHandler)
+logger = logging.getLogger(__name__)
 
-__all__ = ['make_robot']
+__all__ = ['robot', 'logger']
 
 
-def make_robot(robotClass):
+def robot(adapterModule, **kwargs):
     def wrapper(func):
-        bot = robotClass()
+        hasattr(adapterModule, 'MainAdapter')
+        bot = adapterModule.MainAdapter.make_bot(**kwargs)
         func(bot)
         return wraps(func)(bot)
 

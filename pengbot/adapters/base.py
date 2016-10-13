@@ -15,7 +15,11 @@ class BaseAdapter:
     handlers = []
     running = False
 
-    def __init__(self):
+    @classmethod
+    def make_bot(cls, **kwargs):
+        return cls(**kwargs)
+
+    def __init__(self, **kwargs):
         self.handlers = defaultdict(list)
         self.context = Context()
         self.logger = logger

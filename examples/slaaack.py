@@ -4,12 +4,12 @@ import os
 import re
 
 import pengbot
-from pengbot.adapters.slack import SlackRobot, Mention, DirectMessage, PatternMatch
+from pengbot.adapters import slack
 from pengbot.matchers import Everything
 
 
-@pengbot.make_robot(SlackRobot)
-def vvbot(bot):
+@pengbot.robot(slack)
+def slaaack(bot):
     bot.logger.setLevel(logging.DEBUG)
     bot.logger.info('Hi')
 
@@ -18,7 +18,7 @@ def vvbot(bot):
     )
 
 
-@vvbot.hears(Everything)
+@slaaack.hears(Everything)
 def hears_everything(bot, message):
     bot.logger.info('Everything callback %s', message)
 
@@ -40,7 +40,7 @@ def count_to_10(bot, message, limit):
             yield from bot.says('%s .. ' % n, channel)
 
 
-@vvbot.hears(Mention, DirectMessage)
+@slaaack.hears(slack.Mention, slack.DirectMessage)
 def hear_commands(bot, message):
     count_match = re.match(r'.*cuenta\s+hasta\s+(?P<limit>\-?\d+).*', message['text'], re.IGNORECASE)
 
@@ -49,17 +49,17 @@ def hear_commands(bot, message):
         yield from count_to_10(bot, message, limit)
 
 
-@vvbot.hears(DirectMessage)
+@slaaack.hears(slack.DirectMessage)
 def talking_parrot(bot, message):
     yield from bot.says(':bird: %s' % message['text'], message['channel'])
 
 
-@vvbot.hears(PatternMatch(r'(?P<issue>#[1-9][0-9]+)'))
+@slaaack.hears(slack.PatternMatch(r'(?P<issue>#[1-9][0-9]+)'))
 def link_issues(bot, message):
     pass
 
 
-@vvbot.command('uptime')
+@slaaack.command('uptime')
 def reply_uptime(bot, message):
     from datetime import timedelta
 
@@ -70,7 +70,7 @@ def reply_uptime(bot, message):
     bot.says(uptime_string)
 
 
-@vvbot.command('now')
+@slaaack.command('now')
 def reply_now(bot, message):
     from datetime import datetime
 
@@ -78,4 +78,4 @@ def reply_now(bot, message):
 
 
 if __name__ == '__main__':
-    vvbot()
+    slaaack()

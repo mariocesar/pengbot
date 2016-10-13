@@ -9,7 +9,7 @@ Pengbot: For building robots with human manners
     from pengbot.adapters.slack import SlackRobot, Mention
 
 
-    @pengbot.make_robot(SlackRobot)
+    @pengbot.robot(adapter=SlackRobot)
     def mybot(bot):
         bot.context = bot.context(
             api_token=os.environ.get('SLACK_API_TOKEN', None)

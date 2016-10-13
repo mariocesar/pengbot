@@ -56,7 +56,7 @@ class Shell(cmd.Cmd):
             self.do_exit(self)
 
 
-class Adapter(BaseAdapter):
+class MainAdapter(BaseAdapter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.shell = Shell(self)
