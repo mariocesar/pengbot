@@ -1,25 +1,36 @@
-import asyncio
 import json
-import re
 from collections import namedtuple
-from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 import requests
 from pengbot.adapters.base import BaseAdapter
-from pengbot.matchers import PatternMatch as BasePatternMatch
 from pengbot.utils import isbound
+from six import wraps
+from webob import Request
 
-EVENTS = {
-    "message": "A message has been sent to your page",
-    "postback": "Postbacks occur when a Postback button, "
-                "Get Started button, Persistent menu or Structured Message is tapped.",
-    "optin": "This callback will occur when the Send-to-Messenger plugin has been tapped",
-    "account_linking": "This callback will occur when the Linked Account or Unlink Account "
-                       "call-to-action have been tapped.",
-    "delivery": "This callback will occur when a message a page has sent has been delivered.",
-    "read": "This callback will occur when a message a page has sent has been read by the user.",
-}
+
+def wsgi_handler(func):
+    @wraps(func)
+    def inner(*args):
+        self, environ, start_response, *args = args
+        request = Request(environ)
+        try:
+            response = func(self, request)
+        except AssertionError as err:
+            self.logger.exception(err)
+            start_response('400 OK', [('Content-Type', 'text/plain')])
+            return '%r' % err
+        except Exception as err:
+            self.logger.exception(err)
+            start_response('500 OK', [('Content-Type', 'text/plain')])
+            return '%r' % err
+
+        start_response('200 OK', [('Content-Type', 'text/plain')])
+        if response is None:
+            response = ''
+        return response
+
+    return inner
 
 
 class Event:
@@ -27,11 +38,11 @@ class Event:
         return True
 
 
-class Message:
+class Messages:
     def __call__(self, context, message):
         return all(['id' in message,
                     'time' in message,
-                    'message' in message])
+                    'messaging' in message])
 
 
 class Authentication:
@@ -62,21 +73,6 @@ class AccountLink:
 class MessageEcho:
     def __call__(self, context, message):
         return ('is_echo' in context['message']) and (context['message'])
-
-
-class PatternMatch(Message, BasePatternMatch):
-    def __init__(self, pattern):
-        self.pattern = re.compile(pattern)
-
-    def __call__(self, context, message):
-        is_message = super().__call__(context, message)
-        return is_message and self.pattern.match(message['text']) is not None
-
-
-WebURLButton = namedtuple('web_url', ['url', 'title', 'webview_height_ratio', 'messenger_extensions', 'fallback_url'])
-PostbackButton = namedtuple('postback', ['payload', 'title'])
-CallButton = namedtuple('phone_number', ['payload', 'title'])
-ShareButton = namedtuple('element_share', [])
 
 
 class TemplateBase:
@@ -132,139 +128,172 @@ class ButtonTemplate(TemplateBase, namedtuple('ButtonTemplate', ['text'])):
         }
 
 
-class MainAdapter(BaseAdapter):
-    def receive(self):
-        httpd = make_server('', 3000, self.wsgi_application_handler)
-        print("Serving on port 8000...")
-        httpd.serve_forever()
+class Facebook:
+    def __init__(self, adapter):
+        self.adapter = adapter
 
-    def wsgi_application_handler(self, environ, start_response):
-        if environ['REQUEST_METHOD'] == 'POST':
-            try:
-                self.handle_payload(environ, start_response)
-            except Exception as err:
-                self.logger.exception(err)
-                start_response('500 OK', [('Content-Type', 'text/plain')])
-                return 'error'
-            else:
-                start_response('200 OK', [('Content-Type', 'text/plain')])
-                return 'ok'
-        elif environ['REQUEST_METHOD'] == 'GET':
-            return self.handle_verify_token(environ, start_response)
+    def setup_greeting_text(self, greeting_text):
+        """
+        Args:
+            greeting_text:
+                 {{user_first_name}}
+                 {{user_last_name}}
+                 {{user_full_name}}
+        Returns:
 
-        start_response('400 OK', [('Content-Type', 'text/plain')])
-        return 'unknown'
+        """
+        return requests.post(
+            "https://graph.facebook.com/v2.6/me/thread_settings",
+            params={"access_token": self.adapter.context.access_token},
+            headers={'Content-type': 'application/json'},
+            data=json.dumps({"setting_type": "greeting",
+                             "greeting": {"text": greeting_text}})
+        )
 
-    def handle_verify_token(self, environ, start_response):
-        qs = parse_qs(environ['QUERY_STRING'])
-        verify_token = qs.get('hub.verify_token', None)
-        challenge = qs.get('hub.challenge', None)
+    def setup_started_button(self):
+        return requests.post(
+            "https://graph.facebook.com/v2.6/me/thread_settings",
+            params={"access_token": self.adapter.context.access_token},
+            headers={'Content-type': 'application/json'},
+            data=json.dumps({
+                "setting_type": "call_to_actions",
+                "thread_state": "new_thread",
+                "call_to_actions": [{"payload": "NEW_THREAD"}]
+            })
+        )
 
-        if verify_token:
-            verify_token = verify_token.pop()
+    def setup_menu(self, elements: list):
+        return requests.post(
+            "https://graph.facebook.com/v2.6/me/thread_settings",
+            params={"access_token": self.adapter.context.access_token},
+            headers={'Content-type': 'application/json'},
+            data=json.dumps({
+                "setting_type": "call_to_actions",
+                "thread_state": "existing_thread",
+                "call_to_actions": elements
+            })
+        )
 
-        if challenge:
-            challenge = challenge.pop()
+    def setup_whitelist(self, domain_urls):
+        return requests.post(
+            "https://graph.facebook.com/v2.6/me/thread_settings",
+            params={"access_token": self.adapter.context.access_token},
+            headers={'Content-type': 'application/json'},
+            data=json.dumps({
+                "setting_type": "domain_whitelisting",
+                "whitelisted_domains": domain_urls,
+                "domain_action_type": "add"
+            })
+        )
 
-        if verify_token == self.context.verify_token:
-            start_response('200 OK', [('Content-Type', 'text/plain')])
-            return challenge
-        else:
-            return json.dumps({"errors": ["Invalid Token"]})
+    def send_message(self, data):
+        return requests.post(
+            "https://graph.facebook.com/v2.6/me/messages",
+            params={"access_token": self.adapter.context.access_token},
+            headers={'Content-type': 'application/json'},
+            data=json.dumps(data)
+        )
 
-    def handle_payload(self, environ, start_response):
-        request_body = environ['wsgi.input'].read()
-        payload = json.loads(request_body)
+    def send_attachment(self, recipient, attachment_url):
+        attachment_types = {
+            'image': ['.jpeg', '.jpg', '.gif', '.png'],
+            'audio': ['.mp3', '.ogg', '.wav'],
+            'video': ['.avi', '.mp4', '.mpeg', '.3gp', '.mpg', '.webm']
+        }
 
-        print('>>> payload', payload)
+        matching = [[ctype, any(map(lambda ext: attachment_url.endswith(ext), exts))] for ctype, exts in
+                    attachment_types.items()]
+        attachment_type = 'file'
 
-        assert 'object' in payload, 'Missing object type in payload: %r' % payload
-        assert payload['object'] == 'page', 'Unknown object type: %r' % payload['object']
+        for ctype, is_match in matching:
+            if is_match:
+                attachment_type = ctype
+                break
 
-        for entry in payload['entries']:
-            self.handle_message(entry)
-
-    def handle_message(self, entry):
-        assert 'id' in entry, 'Missing id in entry: %r' % entry
-        assert 'time' in entry, 'Missing timestamp in entry: %r' % entry
-
-        for handler_match, handler_callbacks in self.handlers.items():
-            self.logger.debug('Resolving message handler %s %s', handler_match, handler_callbacks)
-            self.logger.debug('Handler match is bound? %s', isbound(handler_match))
-
-            if not isbound(handler_match):
-                handler_match = handler_match()
-
-            if handler_match(context=self.context, message=entry):
-                for callback in handler_callbacks:
-                    callback(self, entry)
-
-    @asyncio.coroutine
-    def send(self, message):
-        response = requests.post("https://graph.facebook.com/v2.6/me/messages",
-                                 params={"access_token": self.context.access_token},
-                                 data=json.dumps(message),
-                                 headers={'Content-type': 'application/json'})
-        return response.content
-
-    @asyncio.coroutine
-    def says(self, recipient, text):
-        self.send({'recipient': recipient, 'text': text})
-
-    @asyncio.coroutine
-    def send_image(self, recipient, image_url):
-        self.send({
+        self.send_message({
             'recipient': recipient,
             'message': {
                 'attachment': {
-                    'type': 'image',
-                    'payload': {'url': image_url}
+                    'type': attachment_type,
+                    'payload': {'url': attachment_url}
                 }
             }
         })
 
-    @asyncio.coroutine
-    def send_audio(self, recipient, audio_url):
-        self.send({
-            'recipient': recipient,
-            'message': {
-                'attachment': {
-                    'type': 'audio',
-                    'payload': {'url': audio_url}
-                }
-            }
-        })
-
-    @asyncio.coroutine
-    def send_video(self, recipient, video_url):
-        self.send({
-            'recipient': recipient,
-            'message': {
-                'attachment': {
-                    'type': 'video',
-                    'payload': {'url': video_url}
-                }
-            }
-        })
-
-    @asyncio.coroutine
-    def send_file(self, recipient, file_url):
-        self.send({
-            'recipient': recipient,
-            'message': {
-                'attachment': {
-                    'type': 'file',
-                    'payload': {'url': file_url}
-                }
-            }
-        })
-
-    @asyncio.coroutine
     def send_template(self, recipient, template: GenericTemplate or ButtonTemplate):
-        return self.send({
+        return self.send_message({
             'recipient': recipient,
             'message': {
                 'type': 'template',
                 'attachment': {'payload': dict(template)}
             }
         })
+
+    def get_user_profile(self, user_id):
+        return requests.get(
+            "https://graph.facebook.com/v2.6/%s" % user_id,
+            params={"access_token": self.adapter.context.access_token,
+                    "fields": "first_name,last_name,profile_pic,locale,timezone,gender"},
+            headers={'Content-type': 'application/json'})
+
+
+class MainAdapter(BaseAdapter):
+    def __setup__(self):
+        self.facebook = Facebook(self)
+
+    def receive(self):
+        httpd = make_server('', 3000, self.wsgi_application)
+        print("Serving on port 8000...")
+        httpd.serve_forever()
+
+    def wsgi_application(self, environ, start_response):
+        if environ['REQUEST_METHOD'] == 'GET':
+            return self.handle_verify_token(environ, start_response)
+        elif environ['REQUEST_METHOD'] == 'POST':
+            return self.handle_payload(environ, start_response)
+
+        start_response('404 OK', [('Content-Type', 'text/plain')])
+        return ''
+
+    @wsgi_handler
+    def handle_verify_token(self, request):
+        verify_token = request.GET.get('hub.verify_token', None)
+        challenge = request.GET.get('hub.challenge', None)
+
+        if verify_token == self.context.verify_token:
+            return challenge
+        else:
+            return json.dumps({"errors": ["Invalid Token"]})
+
+    @wsgi_handler
+    def handle_payload(self, request):
+        payload = json.loads(request.body.decode())
+
+        assert 'object' in payload, 'Missing object type in payload: %r' % payload
+        assert payload['object'] == 'page', 'Unknown object type: %r' % payload['object']
+        assert 'entry' in payload, 'Missing entry'
+
+        for entry in payload['entry']:
+            self.handle_message(entry)
+
+    def handle_message(self, entry):
+        assert 'id' in entry, 'Missing id in entry: %r' % entry
+        assert 'time' in entry, 'Missing timestamp in entry: %r' % entry
+
+        self.logger.debug('Message received: %s' % entry)
+
+        for handler_match, handler_callbacks in self.handlers.items():
+            self.logger.debug('Resolving message handler %s %s', handler_match, handler_callbacks)
+
+            if not isbound(handler_match):
+                handler_match = handler_match()
+
+            if handler_match(context=self.context, message=entry):
+                self.logger.debug('Handler match: %s' % handler_match)
+
+                for callback in handler_callbacks:
+                    callback(entry)
+
+    def says(self, recipient, text):
+        response = self.facebook.send_message({'recipient': {'id': recipient}, 'message': {'text': text}})
+        self.logger.debug(response.content)

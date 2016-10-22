@@ -221,3 +221,7 @@ def isbound(obj):
 class BotLoggerAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
         return msg, kwargs
+
+
+def make_django_view(wsgi_app):
+    pass

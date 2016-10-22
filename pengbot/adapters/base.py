@@ -15,19 +15,22 @@ class BaseAdapter:
     handlers = []
     running = False
 
-    @classmethod
-    def make_bot(cls, **kwargs):
-        return cls(**kwargs)
-
     def __init__(self, **kwargs):
         self.handlers = defaultdict(list)
         self.context = Context()
         self.logger = logger
-
+        self.__setup__()
         BotLoggerAdapter(logger, {'context': self.context})
 
     def __call__(self, *args, **kwargs):
         return self.cli_handler()
+
+    def __setup__(self):
+        pass
+
+    @classmethod
+    def make_bot(cls, **kwargs):
+        return cls(**kwargs)
 
     @property
     def name(self):
@@ -93,6 +96,21 @@ class BaseAdapter:
                     self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
 
                     func(bot, *args, **kwargs)
+
+                self.handlers[match].append(callback)
+
+        return decorator
+
+    def listen(self, *matchs):
+        def decorator(func):
+            for match in matchs:
+                self.logger.debug('Registering match %r for %s', match, func)
+
+                @wraps(func)
+                def callback(*args, **kwargs):
+                    self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
+
+                    func(*args, **kwargs)
 
                 self.handlers[match].append(callback)
 
