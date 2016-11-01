@@ -14,28 +14,26 @@ class UnknownCommand(Exception):
 class BaseAdapter:
     handlers = []
     running = False
+    name = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, setup_method, **kwargs):
         self.handlers = defaultdict(list)
         self.context = Context()
         self.logger = logger
+        self.setup_method = setup_method
         BotLoggerAdapter(logger, {'context': self.context})
 
     def __call__(self, *args, **kwargs):
-        return self.cli_handler()
+        self.setup_method(self)
 
-    @property
-    def name(self):
-        if self.context.get('name', None):
-            return self.context['name']
-        return self.__module__
-
-    def cli_handler(self):
-        # add cli options
         try:
             self.run()
         except KeyboardInterrupt:
             exit(0)
+
+    @property
+    def name(self):
+        return self.setup_method.__name__
 
     def before_reply(self, message):
         logger.debug('before_reply: %r', message)

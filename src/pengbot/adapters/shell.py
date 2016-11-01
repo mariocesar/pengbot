@@ -25,6 +25,7 @@ class Shell(cmd.Cmd):
 
     do_EOF = do_exit
     do_bye = do_exit
+    do_quit = do_exit
 
     def do_directives(self, line):
         """List all directives supported by the bot"""
@@ -37,7 +38,7 @@ class Shell(cmd.Cmd):
                 else:
                     print()
 
-    def says(self, message):
+    def say(self, message):
         with colorize('blue'):
             print('%s> %s' % (self.adapter.context.bot_name, message))
 
@@ -45,14 +46,14 @@ class Shell(cmd.Cmd):
         """Call the bot"""
         with colorize('blue'):
             if not line:
-                self.says('what?')
+                self.say('what?')
 
             try:
                 res = self.adapter.receive(message=line)
             except UnknownCommand:
-                self.says("I do not known what the '%s' directive is" % line)
+                self.say("I do not known what the '%s' directive is" % line)
             else:
-                self.says(res)
+                self.say(res)
 
     def cmdloop(self, intro=None):
         try:
@@ -62,8 +63,8 @@ class Shell(cmd.Cmd):
 
 
 class MainAdapter(BaseAdapter):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.shell = Shell(self)
 
     def receive(self, *args, **kwargs):

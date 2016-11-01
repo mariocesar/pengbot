@@ -6,7 +6,7 @@ from webob import Request
 def robot(adapterModule, **kwargs):
     def wrapper(func):
         hasattr(adapterModule, 'MainAdapter')
-        bot = adapterModule.MainAdapter(**kwargs)
+        bot = adapterModule.MainAdapter(func, **kwargs)
         return wraps(func)(bot)
 
     return wrapper
