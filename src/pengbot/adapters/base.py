@@ -23,9 +23,10 @@ class BaseAdapter:
         self.setup_method = setup_method
         BotLoggerAdapter(logger, {'context': self.context})
 
-    def __call__(self, *args, **kwargs):
+    def __setup__(self):
         self.setup_method(self)
 
+    def __call__(self, *args, **kwargs):
         try:
             self.run()
         except KeyboardInterrupt:
@@ -33,7 +34,7 @@ class BaseAdapter:
 
     @property
     def name(self):
-        return self.setup_method.__name__
+        return self.context.get('name', None) or self.setup_method.__name__
 
     def before_reply(self, message):
         logger.debug('before_reply: %r', message)

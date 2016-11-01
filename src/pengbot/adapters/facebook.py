@@ -108,15 +108,6 @@ class Facebook:
         self.adapter = adapter
 
     def setup_greeting_text(self, greeting_text):
-        """
-        Args:
-            greeting_text:
-                 {{user_first_name}}
-                 {{user_last_name}}
-                 {{user_full_name}}
-        Returns:
-
-        """
         return requests.post(
             "https://graph.facebook.com/v2.6/me/thread_settings",
             params={"access_token": self.adapter.context.access_token},
@@ -214,6 +205,7 @@ class Facebook:
 
 class MainAdapter(BaseAdapter):
     def __setup__(self):
+        super(MainAdapter, self).__setup__()
         self.facebook = Facebook(self)
 
     def receive(self):
@@ -269,6 +261,6 @@ class MainAdapter(BaseAdapter):
                 for callback in handler_callbacks:
                     callback(entry)
 
-    def says(self, recipient, text):
+    def say(self, recipient, text):
         response = self.facebook.send_message({'recipient': {'id': recipient}, 'message': {'text': text}})
         self.logger.debug(response.content)
