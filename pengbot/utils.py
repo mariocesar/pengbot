@@ -165,7 +165,7 @@ color_codes = {
 
 
 @contextmanager
-def colorize(bg=None, fg=None, attr=None, stream=None):
+def colorize(fg=None, bg=None, attr=None, stream=None):
     """Colorize stdout"""
     stdout = stream or sys.stdout
     ansi_codes = []
@@ -221,7 +221,3 @@ def isbound(obj):
 class BotLoggerAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
         return msg, kwargs
-
-
-def make_django_view(wsgi_app):
-    pass

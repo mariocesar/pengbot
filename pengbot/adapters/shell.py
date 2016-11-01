@@ -1,20 +1,25 @@
-import re
-import sys
 import cmd
+import getpass
 
-from pengbot.utils import colorizer
 from pengbot.adapters.base import BaseAdapter, UnknownCommand
+from pengbot.utils import colorize
+
+
+class Event:
+    pass
 
 
 class Shell(cmd.Cmd):
     def __init__(self, adapter, *args, **kwargs):
         self.adapter = adapter
+        adapter.context['user'] = getpass.getuser()
+        self.prompt = "{0}> ".format(adapter.context['user'])
         super().__init__(*args, **kwargs)
-        setattr(self, 'do_%s' % self.adapter.env.bot_name, self.do_bot)
+        setattr(self, 'do_%s' % self.adapter.name, self.do_bot)
 
     def do_exit(self, line):
         """Exit the session"""
-        with colorizer('blue'):
+        with colorize('blue'):
             print('Good bye')
         return -1
 
@@ -24,7 +29,7 @@ class Shell(cmd.Cmd):
     def do_directives(self, line):
         """List all directives supported by the bot"""
         for name, cmd in self.adapter.directives.items():
-            with colorizer('blue'):
+            with colorize('blue'):
                 print('bot %s:' % name)
                 if cmd.__doc__:
                     for line in cmd.__doc__.split('\n'):
@@ -33,12 +38,12 @@ class Shell(cmd.Cmd):
                     print()
 
     def says(self, message):
-        with colorizer('blue'):
-            print('%s> %s' % (self.adapter.env.bot_name, message))
+        with colorize('blue'):
+            print('%s> %s' % (self.adapter.context.bot_name, message))
 
     def do_bot(self, line):
         """Call the bot"""
-        with colorizer('blue'):
+        with colorize('blue'):
             if not line:
                 self.says('what?')
 
@@ -49,7 +54,7 @@ class Shell(cmd.Cmd):
             else:
                 self.says(res)
 
-    def cmdloop(self):
+    def cmdloop(self, intro=None):
         try:
             super().cmdloop()
         except KeyboardInterrupt:
@@ -57,14 +62,13 @@ class Shell(cmd.Cmd):
 
 
 class MainAdapter(BaseAdapter):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.shell = Shell(self)
-        self.shell.prompt = "{env.host_user}> ".format(env=self.env)
 
     def receive(self, *args, **kwargs):
-        with colorizer('green'):
-            print('\n  Hello {env.host_user}\n'.format(env=self.env))
+        with colorize('green'):
+            print('\nHello %s\n' % self.context['user'])
 
         self.shell.cmdloop()
 

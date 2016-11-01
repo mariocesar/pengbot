@@ -4,33 +4,8 @@ from wsgiref.simple_server import make_server
 
 import requests
 from pengbot.adapters.base import BaseAdapter
+from pengbot.decorators import wsgi_handler
 from pengbot.utils import isbound
-from six import wraps
-from webob import Request
-
-
-def wsgi_handler(func):
-    @wraps(func)
-    def inner(*args):
-        self, environ, start_response, *args = args
-        request = Request(environ)
-        try:
-            response = func(self, request)
-        except AssertionError as err:
-            self.logger.exception(err)
-            start_response('400 OK', [('Content-Type', 'text/plain')])
-            return '%r' % err
-        except Exception as err:
-            self.logger.exception(err)
-            start_response('500 OK', [('Content-Type', 'text/plain')])
-            return '%r' % err
-
-        start_response('200 OK', [('Content-Type', 'text/plain')])
-        if response is None:
-            response = ''
-        return response
-
-    return inner
 
 
 class Event:

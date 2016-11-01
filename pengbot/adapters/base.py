@@ -19,24 +19,16 @@ class BaseAdapter:
         self.handlers = defaultdict(list)
         self.context = Context()
         self.logger = logger
-        self.__setup__()
         BotLoggerAdapter(logger, {'context': self.context})
 
     def __call__(self, *args, **kwargs):
         return self.cli_handler()
 
-    def __setup__(self):
-        pass
-
-    @classmethod
-    def make_bot(cls, **kwargs):
-        return cls(**kwargs)
-
     @property
     def name(self):
         if self.context.get('name', None):
             return self.context['name']
-        return self.__name__
+        return self.__module__
 
     def cli_handler(self):
         # add cli options
@@ -85,19 +77,22 @@ class BaseAdapter:
 
     # Directives
 
-    def hears(self, *matchs):
-        def decorator(func):
+    def hear(self, *matchs, **options):
+        def decorator(f):
+            @wraps(f)
+            @asyncio.coroutine
+            def callback(bot, *args, **kwargs):
+                bot.logger.debug('%r: args=%r kwargs=%r', f.__name__, args, kwargs)
+
+                return f(bot, *args, **kwargs)
+
+            callback.__options__ = options
+
             for match in matchs:
-                self.logger.debug('Registering match %r for %s', match, func)
-
-                @wraps(func)
-                @asyncio.coroutine
-                def callback(bot, *args, **kwargs):
-                    self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
-
-                    func(bot, *args, **kwargs)
-
+                self.logger.debug('Registering match %r for %s', match, f)
                 self.handlers[match].append(callback)
+
+            return callback
 
         return decorator
 
@@ -116,13 +111,13 @@ class BaseAdapter:
 
         return decorator
 
-    def ask(self, question):
+    def ask(self, question, **attrs):
         def decorator(func):
             return asyncio.coroutine(func)
 
         return decorator
 
-    def command(self, name):
+    def command(self, name, **attrs):
         def decorator(func):
             return asyncio.coroutine(func)
 

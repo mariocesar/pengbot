@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open('README.rst', 'r') as f:
     readme = f.read()
@@ -16,9 +16,12 @@ setup(
     author='Mario César Señoranis Ayala',
     author_email='mariocesar.c50@gmail.com',
     url='https://github.com/mariocesar/pengbot',
-    packages=packages,
-    package_data={'': ['LICENSE']},
-    package_dir={'requests': 'requests'},
+    install_requires=[
+        'webob==1.6.2',
+        'requests==2.11.1'
+    ],
+    packages=find_packages('src'),
+    package_dir={'': 'src'},
     entry_points={
         'console_scripts': ['pengbot = pengbot.main:main']
     },

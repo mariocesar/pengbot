@@ -42,7 +42,7 @@ class PatternMatch:
         True
     """
 
-    def __init__(self, pattern):
+    def __init__(self, pattern, data=None):
         self.pattern = re.compile(pattern)
 
     def __call__(self, context, message):

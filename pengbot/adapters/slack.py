@@ -7,7 +7,6 @@ from pip.utils import cached_property
 from slacker import Slacker
 
 from pengbot.adapters.base import BaseAdapter
-from pengbot.matchers import PatternMatch as BasePatternMatch
 from pengbot.utils import isbound
 
 EVENTS = {
@@ -93,11 +92,22 @@ class Event:
 
 
 class Message:
+    def __init__(self, data=None):
+        self.data = data
+
     def __call__(self, context, message):
         if message.get('type', None) == 'message' and 'reply_to' not in message:
             # Dimiss messages from lost connections
             return True
         return False
+
+    @property
+    def text(self):
+        return self.data.get('text', None)
+
+    @property
+    def channel(self):
+        return self.data.get('channel', None)
 
 
 class DirectMessage(Message):
@@ -113,9 +123,10 @@ class Mention(Message):
                 return '<@%s>' % context['self']['id'] in message['text']
 
 
-class PatternMatch(Message, BasePatternMatch):
-    def __init__(self, pattern):
+class PatternMatch(Message):
+    def __init__(self, pattern, data=None):
         self.pattern = re.compile(pattern)
+        super(PatternMatch, self).__init__(data=data)
 
     def __call__(self, context, message):
         is_message = super().__call__(context, message)

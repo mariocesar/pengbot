@@ -9,23 +9,12 @@ Pengbot: For building robots with human manners
 
 __title__ = 'pengbot'
 __version__ = '0.1a1'
-__author__ = 'Mar'
+__author__ = 'Mario César Señoranis Ayala <mariocesar.c50@gmail.com>'
 __license__ = 'MIT'
 __copyright__ = 'Copyright 2016 Mario César Señoranis Ayala'
 
 import logging
-from functools import wraps
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['robot', 'logger']
-
-
-def robot(adapterModule, **kwargs):
-    def wrapper(func):
-        hasattr(adapterModule, 'MainAdapter')
-        bot = adapterModule.MainAdapter.make_bot(**kwargs)
-        func(bot)
-        return wraps(func)(bot)
-
-    return wrapper
+from .decorators import robot
