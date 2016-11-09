@@ -1,3 +1,5 @@
-recursive-exclude * __pycache__ *.swp *.pyc *.pyo
+global-exclude * __pycache__ *.swp *.pyc *.pyo .DS_Store
+
+prune docs/_build
 
 include README.rst LICENSE requirements.txt

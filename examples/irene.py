@@ -1,34 +1,64 @@
 import logging
 from collections import namedtuple
 
-from pengbot import robot
+import pengbot
 from pengbot.adapters import shell
 
 task = namedtuple('task', ['name', 'completed'])
 tasks = []
 
 
-@robot(shell)
-def irene(bot):
-    bot.logger.setLevel(logging.DEBUG)
-    bot.logger.info('Hi')
+@pengbot.robot(shell)
+def irene():
+    pengbot.logger.setLevel(logging.DEBUG)
+    pengbot.logger.info('Hi')
 
 
-@irene.hear(shell.Event)
-def hears_everything(bot, message):
-    bot.logger.info('... %s', message)
+@irene.listen()
+def on_message(message):
+    pengbot.logger.info('... %s', message)
 
 
-@irene.command('list')
-def reply_uptime(*args):
-    for task in tasks:
-        irene.says('[{0}] {1}'.format('x' if task.completed else ' ', task.name))
+@irene.receiver(on_message)
+def command(message):
+    match = re.match('^/(?P<name>\w+) (?P<arg>.+)', message['text'])
+    pengbot.logger.info('... %s', message)
 
 
-@irene.command('add')
-def reply_uptime(*args):
-    tasks.append(task(completed=False, name=' '.join(args)))
-    irene.says('I added: {1}'.format('x' if task.completed else ' ', task.name))
+@irene.action
+def whink():
+    yield irene.say(';)')
+
+
+@whink.timeout_callback(whink)
+def list_read_timeout():
+    yield irene.say('Are you there?')
+
+
+@irene.command('list', on=received)
+def list_tasks():
+    for i, task in enumerate(tasks, 1):
+        msg = '{} {}'.format('✔' if task.completed else ' ', task.name)
+        yield irene.say('{}: {}'.format(i, msg)).readed(whink)
+
+
+@irene.command('add', on=received)
+def add_task(name):
+    tasks.append(task(completed=False, name=' '.join(name)))
+    yield irene.say('I added: {}'.format(task.name))
+
+
+@irene.command('remove', on=received)
+def remove_task(index):
+    del tasks[index]
+
+    yield irene.say('Removed: {}'.format(task.name))
+
+
+@irene.command('complete', on=received)
+def complete_task(index):
+    tasks[index].completed = True
+    yield irene.say('✔ {}'.format(task.name))
 
 
 if __name__ == '__main__':
