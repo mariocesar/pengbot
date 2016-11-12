@@ -1,0 +1,50 @@
+{% extends 'layouts/base.html' %}
+
+{% block body %}
+<form action="">
+    <ul id="messages">
+    </ul>
+    <input type="text" autocomplete="off" autofocus="autofocus" id="message"/>
+    <button type="submit">Enviar</button>
+</form>
+
+<script>
+
+    WebSocket.prototype.emit = function (message) {
+        return this.send(JSON.stringify(message))
+    };
+
+    var input = $('#message');
+    var messages = $('#messages');
+    var connection = new WebSocket('ws://localhost:8080/socket');
+    var currentUser = null || prompt("Please enter your name");
+
+    $('form').submit(function () {
+        connection.emit({
+            "sender_id": currentUser,
+            "room": "{{ room }}",
+            "message": {
+                "text": input.val()
+            }
+        });
+
+        input.val('');
+        return false;
+    });
+
+    connection.onopen = function () {
+        connection.emit({'sender_id': currentUser, 'room': "{{ room }}", 'event': 'hello'});
+        messages.append($('<li class="info">').text("Connection open"));
+    };
+
+    connection.onerror = function (error) {
+        messages.append($('<li class="error">').text(error));
+    };
+
+    connection.onmessage = function (event) {
+        console.log(event);
+        messages.append($('<li>').text(event.data));
+    };
+</script>
+
+{% endblock %}
