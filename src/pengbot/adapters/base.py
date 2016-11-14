@@ -1,10 +1,9 @@
-import asyncio
 from collections import defaultdict
 from functools import wraps
 
 from pengbot import logger
 from pengbot.context import Context
-from pengbot.utils import BotLoggerAdapter
+from pengbot.utils import isbound
 
 
 class UnknownCommand(Exception):
@@ -13,18 +12,13 @@ class UnknownCommand(Exception):
 
 class BaseAdapter:
     handlers = []
+    signals = {}
     running = False
     name = None
 
     def __init__(self, setup_method, **kwargs):
-        self.handlers = defaultdict(list)
         self.context = Context()
-        self.logger = logger
         self.setup_method = setup_method
-        BotLoggerAdapter(logger, {'context': self.context})
-
-    def __setup__(self):
-        self.setup_method(self)
 
     def __call__(self, *args, **kwargs):
         try:
@@ -36,20 +30,16 @@ class BaseAdapter:
     def name(self):
         return self.context.get('name', None) or self.setup_method.__name__
 
-    def before_reply(self, message):
-        logger.debug('before_reply: %r', message)
+    def run(self):
+        self.setup_method()
+        self.receive()
 
-    def after_reply(self, message):
-        logger.debug('after_reply: %r', message)
+    def handle_message(self, payload):
+        for handler in self.handlers:
+            if not isbound(handler):
+                handler = handler()
 
-    def _done_callback(self, future):
-        exc_info = future.exception()
-
-        if exc_info:
-            # handle exception
-            logger.exception('Exception for %r', future, exc_info=exc_info)
-        else:
-            logger.debug('Done callback for %r', future)
+            handler(payload)
 
     def receive(self, *args, **kwargs):
         raise NotImplementedError()
@@ -57,67 +47,60 @@ class BaseAdapter:
     def send(self, message):
         raise NotImplementedError()
 
-    def says(self, *args, **kwargs):
+    def say(self, *args, **kwargs):
         raise NotImplementedError()
-
-    def run(self):
-        loop = asyncio.get_event_loop()
-        logger.info('Starting %s', self.name)
-        try:
-            loop.run_until_complete(self.receive())
-        except KeyboardInterrupt:
-            logger.info('Closing')
-            loop.close()
-            raise
-        except Exception as err:
-            logger.exception('Error', exc_info=err)
-            loop.close()
-            raise
 
     # Directives
 
-    def hear(self, *matchs, **options):
-        def decorator(f):
-            @wraps(f)
-            @asyncio.coroutine
-            def callback(bot, *args, **kwargs):
-                bot.logger.debug('%r: args=%r kwargs=%r', f.__name__, args, kwargs)
-
-                return f(bot, *args, **kwargs)
-
-            callback.__options__ = options
-
-            for match in matchs:
-                self.logger.debug('Registering match %r for %s', match, f)
-                self.handlers[match].append(callback)
-
-            return callback
-
-        return decorator
-
-    def listen(self, *matchs):
+    def signal(self):
         def decorator(func):
-            for match in matchs:
-                self.logger.debug('Registering match %r for %s', match, func)
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                signal_setup, signal_args = False, None
+                print('func=', func)
 
-                @wraps(func)
-                def callback(*args, **kwargs):
-                    self.logger.debug('%r: args=%r kwargs=%r', func.__name__, args, kwargs)
+                hit = False
 
+                for listener in self.signals.get(func.__qualname__, []):
+                    hit = True
+                    print('listener=', listener)
+                    if not signal_setup:
+                        signal_args = func(*args, **kwargs) or []
+
+                    if isinstance(signal_args, tuple):
+                        listener(*signal_args)
+                    else:
+                        listener(signal_args)
+
+                if not hit:
+                    print('no attached', func)
                     func(*args, **kwargs)
 
-                self.handlers[match].append(callback)
+            return wrapper
 
         return decorator
 
-    def ask(self, question, **attrs):
+    def listen(self, signal=None):
         def decorator(func):
-            return asyncio.coroutine(func)
+
+            @wraps(func)
+            def callback(*args, **kwargs):
+                return func(*args, **kwargs)
+
+            if not signal:
+                self.handlers.append(callback)
+            else:
+                if signal in self.signals:
+                    self.signals[signal.__qualname__].append(callback)
+                else:
+                    self.signals[signal.__qualname__] = [callback]
 
         return decorator
 
-    def command(self, name, **attrs):
-        def decorator(func):
-            return asyncio.coroutine(func)
 
-        return decorator
+class SocketAdapter(BaseAdapter):
+    pass
+
+
+class ProcessAdapter(BaseAdapter):
+    pass
