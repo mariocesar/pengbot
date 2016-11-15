@@ -4,6 +4,8 @@ import pprint
 import re
 from functools import wraps
 from wsgiref.simple_server import make_server
+
+from aiohttp import web
 from pengbot.adapters.base import BaseAdapter
 from webob import Request, Response
 
@@ -72,15 +74,6 @@ class WebAdapter(BaseAdapter):
     def run(self):
         self.setup_method()
         self.runserver()
-
-    def receive(self, request):
-        self.loop = asyncio.get_event_loop()
-        self.loop.set_debug(True)
-
-        try:
-            self.loop.run_until_complete(self.handle_message(request))
-        finally:
-            self.loop.close()
 
     @property
     def web_handlers(self):

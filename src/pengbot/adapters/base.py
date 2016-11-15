@@ -36,9 +36,18 @@ class BaseAdapter:
         self.setup_method()
         self.receive()
 
-    async def handle_message(self, payload):
+    def receive(self, *args):
+        self.loop = asyncio.get_event_loop()
+        self.loop.set_debug(True)
+
+        try:
+            self.loop.run_until_complete(self.handle_message(*args))
+        finally:
+            self.loop.close()
+
+    async def handle_message(self, *args):
         for handler in self.handlers:
-            coroutine = handler(payload)
+            coroutine = handler(*args)
             print('handler=', handler)
             print('create_task=', coroutine)
             task = self.emit(coroutine)
@@ -48,9 +57,6 @@ class BaseAdapter:
     def emit(self, coroutine):
         print('emit=', coroutine)
         self.loop.create_task(coroutine)
-
-    def receive(self, *args, **kwargs):
-        raise NotImplementedError()
 
     def send(self, message):
         raise NotImplementedError()
