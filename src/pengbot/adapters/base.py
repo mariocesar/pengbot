@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from functools import wraps
 
@@ -15,6 +16,7 @@ class BaseAdapter:
     signals = {}
     running = False
     name = None
+    loop = None
 
     def __init__(self, setup_method, **kwargs):
         self.context = Context()
@@ -34,12 +36,18 @@ class BaseAdapter:
         self.setup_method()
         self.receive()
 
-    def handle_message(self, payload):
+    async def handle_message(self, payload):
         for handler in self.handlers:
-            if not isbound(handler):
-                handler = handler()
+            coroutine = handler(payload)
+            print('handler=', handler)
+            print('create_task=', coroutine)
+            task = self.emit(coroutine)
+            print('task=', task)
+            print()
 
-            handler(payload)
+    def emit(self, coroutine):
+        print('emit=', coroutine)
+        self.loop.create_task(coroutine)
 
     def receive(self, *args, **kwargs):
         raise NotImplementedError()
@@ -53,28 +61,23 @@ class BaseAdapter:
     # Directives
 
     def signal(self):
+        adapter = self
+
         def decorator(func):
             @wraps(func)
-            def wrapper(*args, **kwargs):
-                signal_setup, signal_args = False, None
+            async def wrapper(*args, **kwargs):
                 print('func=', func)
+                result = await func(*args, **kwargs)
 
-                hit = False
-
-                for listener in self.signals.get(func.__qualname__, []):
-                    hit = True
+                for listener in adapter.signals.get(func.__qualname__, []):
                     print('listener=', listener)
-                    if not signal_setup:
-                        signal_args = func(*args, **kwargs) or []
 
-                    if isinstance(signal_args, tuple):
-                        listener(*signal_args)
+                    if isinstance(result, tuple):
+                        adapter.emit(listener(*result))
                     else:
-                        listener(signal_args)
+                        adapter.emit(listener(result))
 
-                if not hit:
-                    print('no attached', func)
-                    func(*args, **kwargs)
+                return result
 
             return wrapper
 

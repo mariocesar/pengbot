@@ -29,9 +29,8 @@ def wsgi_handler(func):
 
         try:
             response = func(self, request)
-        except AssertionError as err:
-            response = Response(body=repr(err), status=500)
-            return response(environ, start_response)
+        except Exception as err:
+            raise
         else:
             return response(environ, start_response)
 
@@ -65,13 +64,23 @@ class WebHandlerMatch:
 class WebAdapter(BaseAdapter):
     _webhandlers = None
 
-    def receive(self):
-        for handler in self.web_handlers:
-            print(handler)
-
+    def runserver(self):
         httpd = make_server('', 3000, self.wsgi_application)
         print("Serving on port 3000...")
         httpd.serve_forever()
+
+    def run(self):
+        self.setup_method()
+        self.runserver()
+
+    def receive(self, request):
+        self.loop = asyncio.get_event_loop()
+        self.loop.set_debug(True)
+
+        try:
+            self.loop.run_until_complete(self.handle_message(request))
+        finally:
+            self.loop.close()
 
     @property
     def web_handlers(self):
@@ -115,14 +124,14 @@ class WebAdapter(BaseAdapter):
     def say(self, message):
         print(message)
 
+
 class Adapter(WebAdapter):
     @WebAdapter.route('POST', r'^/$')
     def handle_payload(self, request):
-        self.handle_message(request)
+        self.receive(request)
         return Response('Ok', 200)
 
     @WebAdapter.route('GET', r'^/$')
     def handle_landing(self, request):
         body = 'Hello!\nhandlers = %s' % pprint.pformat(self.handlers, indent=4)
         return Response(body, 200, content_type='text/plain')
-

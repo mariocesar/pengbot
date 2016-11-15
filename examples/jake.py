@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -5,6 +6,7 @@ import re
 from collections import namedtuple
 
 import pengbot
+import requests
 from pengbot.adapters import web
 
 task = namedtuple('task', ['name', 'completed'])
@@ -19,18 +21,27 @@ def jake():
     pengbot.logger.info('Hi')
 
 
-def whink():
-    return jake.say(';)')
+def say(recipient, text):
+    requests.post('http://127.0.0.1:1500/', json={
+        "sender_id": "1",
+        "recipient_id": recipient,
+        "message": {
+            "text": text
+        }})
+
+
+def whink(recipient):
+    say(recipient, '; )')
 
 
 @jake.signal()
-def text_received(message):
+async def text_received(message):
     print('text received', message)
     return message
 
 
 @jake.signal()
-def command_received(message):
+async def command_received(message):
     print('command received', message)
     match = cmdregexp.match(message['message']['text'])
     groups = match.groupdict()
@@ -41,16 +52,17 @@ def command_received(message):
 
 
 @jake.signal()
-def message_received(message):
-    if 'text' in message['message']:
-        if cmdregexp.match(message['message']['text']):
-            return command_received(message)
-        else:
-            return text_received(message)
+async def message_received(message):
+    # if 'text' in message['message']:
+    #     if cmdregexp.match(message['message']['text']):
+    #         jake.emit(command_received(message))
+    #     else:
+    #         jake.emit(text_received(message))
+    await asyncio.sleep(0)
 
 
 @jake.listen()
-def receive_request(request):
+async def receive_request(request):
     is_json_post_request = all([
         request.method == 'POST',
         request.content_type == 'application/json'])
@@ -59,28 +71,28 @@ def receive_request(request):
 
     if is_json_post_request:
         payload = request.body.decode()
-        data = json.loads(payload)
+        message = json.loads(payload)
 
-        assert 'sender_id' in data
-        assert 'recipient_id' in data
+        assert 'sender_id' in message, 'missing sender'
+        assert 'recipient_id' in message, 'missing recipient'
 
-        if 'message' in data:
-            print('message received', data)
-            return message_received(data)
+        if 'message' in message:
+            print('message received', message)
+            jake.emit(message_received(message))
 
 
 def receive_greeting(message):
-    jake.say('Hello!')
-    whink()
+    say(message['sender_id'], 'Hello!')
+    whink(message['sender_id'])
 
 
 def receive_goodbye(message):
-    jake.say('Bye!')
-    whink()
+    say(message['sender_id'], 'Bye!')
+    whink(message['sender_id'])
 
 
 @jake.listen(text_received)
-def receive_text(message):
+async def receive_text(message):
     print('receive text', message)
 
     if message['message']['text'] == 'hi':
@@ -89,44 +101,42 @@ def receive_text(message):
         receive_goodbye(message)
 
 
-def command_list_received(message):
+async def command_list_received(message):
     for i, task in enumerate(tasks, 1):
         msg = '{} {}'.format('✔' if task.completed else ' ', task.name)
-        jake.say('{}: {}'.format(i, msg)).readed(whink)
+        say(message['sender_id'], '{}: {}'.format(i, msg)).readed(whink)
 
 
-def command_create_received(message, *args):
+async def command_create_received(message, *args):
     tasks.append(task(completed=False, name=' '.join(args)))
-    jake.say('I added: {}'.format(task.name))
+    say(message['sender_id'], 'I added: {}'.format(task.name))
 
 
-def command_remove_received(message, *args):
+async def command_remove_received(message, *args):
     for arg in args:
         del tasks[arg]
 
-        jake.say('Removed: {}'.format(task.name))
+        say(message['sender_id'], 'Removed: {}'.format(task.name))
 
 
-def command_complete_received(message, *args):
+async def command_complete_received(message, *args):
     for arg in args:
         del tasks[arg]
         tasks[arg].completed = True
-        jake.say('✔ {}'.format(task.name))
+        say(message['sender_id'], '✔ {}'.format(task.name))
 
 
 @jake.listen(command_received)
 def receive_command(message, name, args):
-    print('receive command', message, name, args)
-
     if name == 'list':
-        command_list_received(message)
+        jake.emit(command_list_received(message))
     elif name == 'create':
-        command_create_received(message, args)
+        jake.emit(command_create_received(message, args))
     elif name == 'remove':
-        command_remove_received(message, args)
+        jake.emit(command_remove_received(message, args))
     elif name == 'complete':
-        command_complete_received(message, args)
+        jake.emit(command_complete_received(message, args))
 
 
 if __name__ == '__main__':
-    jake()
+    jake.run()
