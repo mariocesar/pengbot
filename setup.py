@@ -18,7 +18,7 @@ setup(
     url='https://github.com/mariocesar/pengbot',
     install_requires=[
         'webob==1.6.2',
-        'requests==2.11.1'
+        'requests==2.20.0'
     ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
